@@ -34,12 +34,8 @@ class MainTest {
         final InputStream original = System.in;
         final FileInputStream fips = new FileInputStream(new File(filepath));
         System.setIn(fips);
-        try {
-            Main.main(args);
-            throw new Exception("expected the typechecker to fail!");
-        } catch (Exception e) {
-            // TODO: check that there is a type error actually, and not a problem with implementation
-        }
-        System.setIn(original);
+        Main.main(args); // TODO: check that if it fail then there is a type error actually, and not a problem with implementation
+        throw new Exception("expected the typechecker to fail!");
+        // System.setIn(original); // dead code
     }
 }
