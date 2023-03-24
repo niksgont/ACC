@@ -6,6 +6,7 @@ import org.antlr.v4.runtime.atn.*;
 import org.antlr.v4.runtime.dfa.*;
 import java.util.*;
 
+import org.stella.typecheck.TypeCheck;
 import org.syntax.stella.*;
 import org.syntax.stella.Absyn.*;
 import org.stella.eval.*;
