@@ -17,12 +17,12 @@ class MainTest {
             "tests/well-typed/higher-order-1.stella",
             "tests/well-typed/increment_twice.stella",
             "tests/well-typed/logical-operators.stella"})
-    public void testWellTyped(String filepath) throws IOException, Exception {
+    void testWellTyped(String filepath) throws Exception {
         String[] args = new String[0];
         final InputStream original = System.in;
-        final FileInputStream fips = new FileInputStream(new File(filepath));
+        final FileInputStream fips = new FileInputStream(filepath);
         System.setIn(fips);
-        Main.main(args);
+        Assertions.assertDoesNotThrow(() -> Main.main(args));
         System.setIn(original);
     }
 
@@ -44,22 +44,13 @@ class MainTest {
             "tests/ill-typed/undefined-variable-2.stella",
             "tests/ill-typed/bad-squares-1.stella",
             "tests/ill-typed/bad-squares-2.stella"})
-    public void testIllTyped(String filepath) throws IOException, Exception {
+    void testIllTyped(String filepath) throws Exception {
         String[] args = new String[0];
-        final InputStream original = System.in;
-        final FileInputStream fips = new FileInputStream(new File(filepath));
+        final FileInputStream fips = new FileInputStream(filepath);
         System.setIn(fips);
 
-        boolean typecheckerFailed = false;
-        try {
-            Main.main(args); // TODO: check that if it fail then there is a type error actually, and not a problem with implementation
-        } catch (Exception e) {
-            System.out.println("Type Error: " + e.getMessage());
-            typecheckerFailed = true;
-        }
-        if (!typecheckerFailed) {
-            throw new Exception("expected the typechecker to fail!");
-        }
-        // System.setIn(original); // dead code
+        // Change Exception class to your specific
+        Exception exception = assertThrows(Exception.class, () -> Main.main(args), "Expected the type checker to fail!");
+        System.out.println("Type Error: " + exception.getMessage());
     }
 }
