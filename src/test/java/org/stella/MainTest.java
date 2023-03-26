@@ -14,6 +14,7 @@ class MainTest {
     @ValueSource(strings = {
             "tests/well-typed/factorial.stella",
             "tests/well-typed/squares.stella",
+            "tests/well-typed/higher-order-1.stella",
             "tests/well-typed/increment_twice.stella",
             "tests/well-typed/logical-operators.stella"})
     public void testWellTyped(String filepath) throws IOException, Exception {
