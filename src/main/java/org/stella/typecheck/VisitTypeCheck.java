@@ -2,6 +2,8 @@
 
 package org.stella.typecheck;
 
+import org.syntax.stella.Absyn.*;
+
 /*** Visitor Design Pattern Skeleton. ***/
 
 /* This implements the common visitor design pattern.
@@ -66,6 +68,14 @@ public class VisitTypeCheck
     { /* Code for DeclTypeAlias goes here */
       //p.stellaident_;
       p.type_.accept(new TypeVisitor<R,A>(), arg);
+      return null;
+    }
+
+    public R visit(DeclExceptionType p, A arg) {
+      return null;
+    }
+
+    public R visit(DeclExceptionVariant p, A arg) {
       return null;
     }
   }
@@ -179,6 +189,19 @@ public class VisitTypeCheck
     { /* Code for TypeUnit goes here */
       return null;
     }
+
+    public R visit(TypeTop p, A arg) {
+      return null;
+    }
+
+    public R visit(TypeBottom p, A arg) {
+      return null;
+    }
+
+    public R visit(TypeRef p, A arg) {
+      return null;
+    }
+
     public R visit(org.syntax.stella.Absyn.TypeVar p, A arg)
     { /* Code for TypeVar goes here */
       //p.stellaident_;
@@ -329,6 +352,11 @@ public class VisitTypeCheck
       p.expr_2.accept(new ExprVisitor<R,A>(), arg);
       return null;
     }
+
+    public R visit(Assign p, A arg) {
+      return null;
+    }
+
     public R visit(org.syntax.stella.Absyn.If p, A arg)
     { /* Code for If goes here */
       p.expr_1.accept(new ExprVisitor<R,A>(), arg);
@@ -394,6 +422,11 @@ public class VisitTypeCheck
       p.type_.accept(new TypeVisitor<R,A>(), arg);
       return null;
     }
+
+    public R visit(TypeCast p, A arg) {
+      return null;
+    }
+
     public R visit(org.syntax.stella.Absyn.Abstraction p, A arg)
     { /* Code for Abstraction goes here */
       for (org.syntax.stella.Absyn.ParamDecl x: p.listparamdecl_) {
@@ -459,6 +492,15 @@ public class VisitTypeCheck
       p.expr_2.accept(new ExprVisitor<R,A>(), arg);
       return null;
     }
+
+    public R visit(Ref p, A arg) {
+      return null;
+    }
+
+    public R visit(Deref p, A arg) {
+      return null;
+    }
+
     public R visit(org.syntax.stella.Absyn.Application p, A arg)
     { /* Code for Application goes here */
       p.expr_.accept(new ExprVisitor<R,A>(), arg);
@@ -514,6 +556,23 @@ public class VisitTypeCheck
       p.expr_.accept(new ExprVisitor<R,A>(), arg);
       return null;
     }
+
+    public R visit(Panic p, A arg) {
+      return null;
+    }
+
+    public R visit(Throw p, A arg) {
+      return null;
+    }
+
+    public R visit(TryCatch p, A arg) {
+      return null;
+    }
+
+    public R visit(TryWith p, A arg) {
+      return null;
+    }
+
     public R visit(org.syntax.stella.Absyn.Inl p, A arg)
     { /* Code for Inl goes here */
       p.expr_.accept(new ExprVisitor<R,A>(), arg);
@@ -585,6 +644,11 @@ public class VisitTypeCheck
       //p.integer_;
       return null;
     }
+
+    public R visit(ConstMemory p, A arg) {
+      return null;
+    }
+
     public R visit(org.syntax.stella.Absyn.Var p, A arg)
     { /* Code for Var goes here */
       //p.stellaident_;
