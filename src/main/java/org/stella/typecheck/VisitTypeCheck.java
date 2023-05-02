@@ -64,6 +64,12 @@ public class VisitTypeCheck
       p.expr_.accept(new ExprVisitor<R,A>(), arg);
       return null;
     }
+
+    @Override
+    public R visit(DeclFunGeneric p, A arg) {
+      return null;
+    }
+
     public R visit(org.syntax.stella.Absyn.DeclTypeAlias p, A arg)
     { /* Code for DeclTypeAlias goes here */
       //p.stellaident_;
@@ -139,6 +145,12 @@ public class VisitTypeCheck
       p.type_.accept(new TypeVisitor<R,A>(), arg);
       return null;
     }
+
+    @Override
+    public R visit(TypeForAll p, A arg) {
+      return null;
+    }
+
     public R visit(org.syntax.stella.Absyn.TypeRec p, A arg)
     { /* Code for TypeRec goes here */
       //p.stellaident_;
@@ -380,6 +392,12 @@ public class VisitTypeCheck
       p.expr_.accept(new ExprVisitor<R,A>(), arg);
       return null;
     }
+
+    @Override
+    public R visit(TypeAbstraction p, A arg) {
+      return null;
+    }
+
     public R visit(org.syntax.stella.Absyn.LessThan p, A arg)
     { /* Code for LessThan goes here */
       p.expr_1.accept(new ExprVisitor<R,A>(), arg);
@@ -509,6 +527,12 @@ public class VisitTypeCheck
       }
       return null;
     }
+
+    @Override
+    public R visit(TypeApplication p, A arg) {
+      return null;
+    }
+
     public R visit(org.syntax.stella.Absyn.DotRecord p, A arg)
     { /* Code for DotRecord goes here */
       p.expr_.accept(new ExprVisitor<R,A>(), arg);
