@@ -114,4 +114,3 @@ class BNFCErrorListener implements ANTLRErrorListener
     {
     }
 }
-
