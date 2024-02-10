@@ -1,5 +1,10 @@
 language core;
+extend with #tuples;
 
-fn main(f : Nat) -> Nat {
-  return f(f);
+fn rotate3(p : {Nat, Nat, Nat}) -> {Nat, Nat, Nat} {
+  return {p.3, p.1, p.2}
+}
+
+fn main(x : Nat) -> {Nat, Nat, Nat} {
+  return rotate3({x, succ(x), succ(succ(x)), 0})
 }
