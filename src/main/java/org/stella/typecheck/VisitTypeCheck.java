@@ -145,7 +145,7 @@ public class VisitTypeCheck {
 
         public Type visit(org.syntax.stella.Absyn.SomeReturnType p, A arg) { /* Code for SomeReturnType goes here */
             p.type_.accept(new TypeVisitor(), arg);
-            return null;
+            return p.type_;
         }
     }
 
@@ -185,7 +185,7 @@ public class VisitTypeCheck {
         public Type visit(org.syntax.stella.Absyn.TypeSum p, A arg) { /* Code for TypeSum goes here */
             p.type_1.accept(new TypeVisitor(), arg);
             p.type_2.accept(new TypeVisitor(), arg);
-            return null;
+            return new TypeSum(p.type_1, p.type_2);
         }
 
         public Type visit(org.syntax.stella.Absyn.TypeTuple p, A arg) { /* Code for TypeTuple goes here */
@@ -250,8 +250,17 @@ public class VisitTypeCheck {
     public class MatchCaseVisitor implements org.syntax.stella.Absyn.MatchCase.Visitor<org.syntax.stella.Absyn.Type, A> {
         public Type visit(org.syntax.stella.Absyn.AMatchCase p, A arg) { /* Code for AMatchCase goes here */
             p.pattern_.accept(new PatternVisitor(), arg);
-            p.expr_.accept(new ExprVisitor(), arg);
-            return null;
+            if (arg.expectedType instanceof TypeList) {
+                if (!(p.pattern_ instanceof PatternCons || p.pattern_ instanceof PatternList)) {
+                    throw new TypeCheckException("ERROR_UNEXPECTED_PATTERN_FOR_TYPE");
+                }
+            }
+            if (arg.expectedType instanceof TypeSum) {
+                if (!(p.pattern_ instanceof PatternInl || p.pattern_ instanceof PatternInr)) {
+                    throw new TypeCheckException("ERROR_UNEXPECTED_PATTERN_FOR_TYPE");
+                }
+            }
+            return p.expr_.accept(new ExprVisitor(), new A(arg.IdentTypes, null));
         }
     }
 
@@ -296,13 +305,22 @@ public class VisitTypeCheck {
         }
 
         public Type visit(org.syntax.stella.Absyn.PatternInl p, A arg) { /* Code for PatternInl goes here */
-            p.pattern_.accept(new PatternVisitor(), arg);
-            return null;
+            if (arg.expectedType instanceof TypeSum) {
+                p.pattern_.accept(new PatternVisitor(), new A(arg.IdentTypes, ((TypeSum)arg.expectedType).type_1));
+                arg.IdentTypes.put("1__inl", new TypeUnit());
+                return null;
+            }
+            throw new TypeCheckException("ERROR_UNEXPECTED_PATTERN_FOR_TYPE");
         }
 
         public Type visit(org.syntax.stella.Absyn.PatternInr p, A arg) { /* Code for PatternInr goes here */
-            p.pattern_.accept(new PatternVisitor(), arg);
-            return null;
+
+            if (arg.expectedType instanceof TypeSum) {
+                p.pattern_.accept(new PatternVisitor(), new A(arg.IdentTypes, ((TypeSum)arg.expectedType).type_2));
+                arg.IdentTypes.put("1__inl", new TypeUnit());
+                return null;
+            }
+            throw new TypeCheckException("ERROR_UNEXPECTED_PATTERN_FOR_TYPE");
         }
 
         public Type visit(org.syntax.stella.Absyn.PatternTuple p, A arg) { /* Code for PatternTuple goes here */
@@ -355,7 +373,7 @@ public class VisitTypeCheck {
         }
 
         public Type visit(org.syntax.stella.Absyn.PatternVar p, A arg) { /* Code for PatternVar goes here */
-            //p.stellaident_;
+            arg.IdentTypes.put(p.stellaident_, arg.expectedType);
             return null;
         }
     }
@@ -371,8 +389,8 @@ public class VisitTypeCheck {
     public class BindingVisitor implements org.syntax.stella.Absyn.Binding.Visitor<org.syntax.stella.Absyn.Type, A> {
         public Type visit(org.syntax.stella.Absyn.ABinding p, A arg) { /* Code for ABinding goes here */
             //p.stellaident_;
-            p.expr_.accept(new ExprVisitor(), arg);
-            return null;
+
+            return p.expr_.accept(new ExprVisitor(), arg);
         }
     }
 
@@ -401,12 +419,16 @@ public class VisitTypeCheck {
             throw new TypeCheckException("UNEXPECTED_TYPE_FOR_EXPRESSION 1");
         }
 
+
         public Type visit(org.syntax.stella.Absyn.Let p, A arg) { /* Code for Let goes here */
-            for (org.syntax.stella.Absyn.PatternBinding x : p.listpatternbinding_) {
-                x.accept(new PatternBindingVisitor(), arg);
+            HashMap <String, Type> context = new HashMap<>(arg.IdentTypes);
+
+            for (org.syntax.stella.Absyn.PatternBinding x: p.listpatternbinding_) {
+                Type type = x.accept(new PatternBindingVisitor(), new A(arg.IdentTypes, null));
+                context.put(((PatternVar)((APatternBinding) x).pattern_).stellaident_, type);
             }
-            p.expr_.accept(new ExprVisitor(), arg);
-            return null;
+
+            return p.expr_.accept(new ExprVisitor(), new A(context, arg.expectedType));
         }
 
         public Type visit(org.syntax.stella.Absyn.LetRec p, A arg) { /* Code for LetRec goes here */
@@ -459,9 +481,15 @@ public class VisitTypeCheck {
         }
 
         public Type visit(org.syntax.stella.Absyn.TypeAsc p, A arg) { /* Code for TypeAsc goes here */
-            p.expr_.accept(new ExprVisitor(), arg);
-            p.type_.accept(new TypeVisitor(), arg);
-            return null;
+            Type type = p.type_.accept(new TypeVisitor(), arg);
+            p.expr_.accept(new ExprVisitor(), new A(arg.IdentTypes, type));
+            if (arg.expectedType == null) {
+                return type;
+            }
+            if (type.equals(arg.expectedType)) {
+                return arg.expectedType;
+            }
+            throw new TypeCheckException("UNEXPECTED_TYPE_FOR_EXPRESSION");
         }
 
         @Override
@@ -500,7 +528,7 @@ public class VisitTypeCheck {
             if (currentType.equals(arg.expectedType)) {
                 return arg.expectedType;
             }
-            throw new TypeCheckException("ERROR_NOT_A_FUNCTION");
+            throw new TypeCheckException("UNEXPECTED_TYPE_FOR_EXPRESSION");
         }
 
         public Type visit(org.syntax.stella.Absyn.Variant p, A arg) { /* Code for Variant goes here */
@@ -510,18 +538,73 @@ public class VisitTypeCheck {
         }
 
         public Type visit(org.syntax.stella.Absyn.Match p, A arg) { /* Code for Match goes here */
-            p.expr_.accept(new ExprVisitor(), arg);
-            for (org.syntax.stella.Absyn.MatchCase x : p.listmatchcase_) {
-                x.accept(new MatchCaseVisitor(), arg);
+
+            if (p.listmatchcase_.isEmpty()) {
+                throw new TypeCheckException("ERROR_ILLEGAL_EMPTY_MATCHING");
             }
-            return null;
+            ListType outType = new ListType();
+            Type type = p.expr_.accept(new ExprVisitor(),  new A(arg.IdentTypes, null));
+            boolean isInlPresent = false, isInrPresent = false, isConsPresent = false, isEmptyPresent = false;
+
+            for (org.syntax.stella.Absyn.MatchCase x: p.listmatchcase_) {
+                Pattern pattern = ((AMatchCase) x).pattern_;
+
+                if (pattern instanceof PatternInl) {
+                    isInlPresent = true;
+                } else if (pattern instanceof PatternInr) {
+                    isInrPresent = true;
+                } else if (pattern instanceof PatternCons) {
+                    isConsPresent = true;
+                } else if (pattern instanceof PatternList && ((PatternList) pattern).listpattern_.isEmpty()) {
+                    isEmptyPresent = true;
+                }
+
+                Type innerMatchExprType = x.accept(new MatchCaseVisitor(), new A(arg.IdentTypes, type));
+
+                if (!(innerMatchExprType.equals(arg.expectedType)) && arg.expectedType != null) {
+                    throw new TypeCheckException("UNEXPECTED_TYPE_FOR_EXPRESSION 1");
+                }
+                outType.push(innerMatchExprType);
+            }
+
+            for (int i = 1; i < outType.size() ; i++) {
+                if (!(outType.get(i-1).equals(outType.get(i))) && outType.get(i) != null) {
+                    throw new TypeCheckException("UNEXPECTED_TYPE_FOR_EXPRESSION 1");
+                }
+
+            }
+
+            if (type instanceof TypeSum && (!isInlPresent || !isInrPresent)) {
+                throw new TypeCheckException("ERROR_NONEXHAUSTIVE_MATCH_PATTERNS");
+            } else if (type instanceof TypeList && (!isConsPresent || !isEmptyPresent)) {
+                throw new TypeCheckException("ERROR_NONEXHAUSTIVE_MATCH_PATTERNS");
+            }
+
+            return outType.get(0);
         }
 
         public Type visit(org.syntax.stella.Absyn.List p, A arg) { /* Code for List goes here */
-            for (org.syntax.stella.Absyn.Expr x : p.listexpr_) {
-                x.accept(new ExprVisitor(), arg);
+            Type prev = null;
+            for (org.syntax.stella.Absyn.Expr x: p.listexpr_) {
+                if (prev == null)
+                    prev = x.accept(new ExprVisitor(), new A(arg.IdentTypes, null));
+                else
+                    prev = x.accept(new ExprVisitor(), new A(arg.IdentTypes, prev));
             }
-            return null;
+
+            if (prev == null && arg.expectedType instanceof TypeList) return new TypeList(prev);
+            try {
+                Type listType = new TypeList(prev);
+                if (arg.expectedType == null) {
+                    return listType;
+                }
+                if (listType.equals(arg.expectedType)) {
+                    return arg.expectedType;
+                }
+                throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION 1");
+            } catch (TypeCheckException e) {
+                throw new TypeCheckException("ERROR_UNEXPECTED_LIST");
+            }
         }
 
         public Type visit(org.syntax.stella.Absyn.Add p, A arg) { /* Code for Add goes here */
@@ -582,7 +665,7 @@ public class VisitTypeCheck {
                 if (retType.equals(arg.expectedType)) {
                     return arg.expectedType;
                 }
-                throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION");
+                throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION 2");
 
             } else {
                 throw new TypeCheckException("ERROR_NOT_A_FUNCTION");
@@ -606,29 +689,22 @@ public class VisitTypeCheck {
                         if (((ARecordFieldType) i).type_.equals(arg.expectedType)) {
                             return arg.expectedType;
                         }
-                        throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION");
+                        throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION 3");
                     }
-
-
                 throw new TypeCheckException("ERROR_UNEXPECTED_FIELD_ACCESS");
             } else throw new TypeCheckException("ERROR_NOT_A_RECORD");
-
-            //p.stellaident_;
-            // return null;
         }
 
         public Type visit(org.syntax.stella.Absyn.DotTuple p, A arg) { /* Code for DotTuple goes here */
             Type dotType = p.expr_.accept(new ExprVisitor(), new A(arg.IdentTypes, null));
-            if (!(dotType instanceof TypeTuple))
-            {
+            if (!(dotType instanceof TypeTuple)) {
                 throw new TypeCheckException("ERROR_NOT_A_TUPLE");
-            }
-            else{
+            } else {
                 ListType params = ((TypeTuple) dotType).listtype_;
                 if (p.integer_ < 1) throw new TypeCheckException("ERROR_TUPLE_INDEX_OUT_OF_BOUNDS");
                 if (p.integer_ > ((TypeTuple) dotType).listtype_.size())
                     throw new TypeCheckException("ERROR_TUPLE_INDEX_OUT_OF_BOUNDS");
-                for (int index = 0; index < params.size(); index++){
+                for (int index = 0; index < params.size(); index++) {
                     //if (arg.expectedType == null) return param;
                     if (params.get(index).equals(arg.expectedType)) return params.get(index);
                 }
@@ -637,13 +713,16 @@ public class VisitTypeCheck {
         }
 
         public Type visit(org.syntax.stella.Absyn.Tuple p, A arg) { /* Code for Tuple goes here */
-            ListType params = new ListType();
             if (arg.expectedType != null)
                 if (!(arg.expectedType instanceof TypeTuple)) throw new TypeCheckException("ERROR_UNEXPECTED_TUPLE");
-
+            ListType params = new ListType();
 
             TypeTuple typeTuple = (TypeTuple) arg.expectedType;
-
+            if (arg.expectedType != null) {
+                if (p.listexpr_.size() != typeTuple.listtype_.size()) {
+                    throw new TypeCheckException("ERROR_UNEXPECTED_TUPLE_LENGTH");
+                }
+            }
             int i = 0;
             for (org.syntax.stella.Absyn.Expr x : p.listexpr_) {
                 Type type;
@@ -657,31 +736,32 @@ public class VisitTypeCheck {
             }
 
             Type recordType = new TypeTuple(params);
-
-            if (arg.expectedType != null) {
-                assert typeTuple != null;
-                if (p.listexpr_.size() != typeTuple.listtype_.size()) {
-                    throw new TypeCheckException("ERROR_UNEXPECTED_TUPLE_LENGTH");
-                }
-            }
             if (arg.expectedType == null) {
                 return recordType;
             }
             if (recordType.equals(arg.expectedType)) {
                 return arg.expectedType;
             }
-            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION");
+            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION 4");
             //return null;
         }
 
         public Type visit(org.syntax.stella.Absyn.Record p, A arg) {
 
             ListRecordFieldType params = new ListRecordFieldType();
-            if (arg.expectedType != null) if (!(arg.expectedType instanceof TypeRecord)) {
-                throw new TypeCheckException("ERROR_UNEXPECTED_RECORD");
-            }
+            if (arg.expectedType != null)
+                if (!(arg.expectedType instanceof TypeRecord)) {
+                    throw new TypeCheckException("ERROR_UNEXPECTED_RECORD");
+                }
+
             int i = 0;
             TypeRecord typeRecord = (TypeRecord) arg.expectedType;
+            if (arg.expectedType != null) {
+                //assert typeRecord != null;
+                if (p.listbinding_.size() != typeRecord.listrecordfieldtype_.size()) {
+                    throw new TypeCheckException("ERROR_UNEXPECTED_RECORD_FIELDS");
+                }
+            }
             for (org.syntax.stella.Absyn.Binding x : p.listbinding_) {
                 Type type;
                 if (typeRecord != null) {
@@ -692,13 +772,6 @@ public class VisitTypeCheck {
                 params.add(new ARecordFieldType(((ABinding) x).stellaident_, type));
                 i++;
             }
-
-            if (arg.expectedType != null) {
-                assert typeRecord != null;
-                if (p.listbinding_.size() != typeRecord.listrecordfieldtype_.size()) {
-                    throw new TypeCheckException("ERROR_UNEXPECTED_RECORD_FIELDS");
-                }
-            }
             Type recordType = new TypeRecord(params);
             if (arg.expectedType == null) {
                 return recordType;
@@ -706,28 +779,70 @@ public class VisitTypeCheck {
             if (recordType.equals(arg.expectedType)) {
                 return arg.expectedType;
             }
-            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION");
+            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION 5");
         }
 
         public Type visit(org.syntax.stella.Absyn.ConsList p, A arg) { /* Code for ConsList goes here */
-            p.expr_1.accept(new ExprVisitor(), arg);
-            p.expr_2.accept(new ExprVisitor(), arg);
-            return null;
+            if (arg.expectedType instanceof TypeList) {
+                p.expr_1.accept(new ExprVisitor(), new A(arg.IdentTypes, ((TypeList) arg.expectedType).type_));
+                p.expr_2.accept(new ExprVisitor(), arg);
+                return null;
+            } else {
+                throw new TypeCheckException("ERROR_UNEXPECTED_LIST");
+            }
         }
 
         public Type visit(org.syntax.stella.Absyn.Head p, A arg) { /* Code for Head goes here */
-            p.expr_.accept(new ExprVisitor(), arg);
-            return null;
+            Type type = p.expr_.accept(new ExprVisitor(), new A(arg.IdentTypes, null));
+            if (type instanceof TypeList) {
+                if (arg.expectedType == null) {
+                    return ((TypeList) type).type_;
+                }
+                if (((TypeList) type).type_.equals(arg.expectedType)) {
+                    return arg.expectedType;
+                }
+                throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION 6");
+            }
+            else
+                throw new TypeCheckException("ERROR_NOT_A_LIST");
         }
 
         public Type visit(org.syntax.stella.Absyn.IsEmpty p, A arg) { /* Code for IsEmpty goes here */
-            p.expr_.accept(new ExprVisitor(), arg);
-            return null;
+            Type type = p.expr_.accept(new ExprVisitor(), new A(arg.IdentTypes, null));
+            if (type instanceof TypeList) {
+                if (((TypeList) type).type_ == null) {
+                    throw new TypeCheckException("ERROR_AMBIGUOUS_LIST_TYPE");
+                }
+                Type boolType = new TypeBool();
+                if (arg.expectedType == null) {
+                    return boolType;
+                }
+                if (boolType.equals(arg.expectedType)) {
+                    return arg.expectedType;
+                }
+                throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION 7");
+            } else {
+                throw new TypeCheckException("ERROR_NOT_A_LIST");
+            }
         }
 
         public Type visit(org.syntax.stella.Absyn.Tail p, A arg) { /* Code for Tail goes here */
-            p.expr_.accept(new ExprVisitor(), arg);
-            return null;
+            Type type = p.expr_.accept(new ExprVisitor(), new A(arg.IdentTypes, null));
+            if (type instanceof TypeList) {
+                if (((TypeList) type).type_ == null) {
+                    throw new TypeCheckException("ERROR_AMBIGUOUS_LIST_TYPE");
+                }
+                if (arg.expectedType == null) {
+                    return type;
+                }
+                if (type.equals(arg.expectedType)) {
+                    return arg.expectedType;
+                }
+                throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION 8");
+            }
+            else {
+                throw new TypeCheckException("ERROR_NOT_A_LIST");
+            }
         }
 
         @Override
@@ -751,12 +866,24 @@ public class VisitTypeCheck {
         }
 
         public Type visit(org.syntax.stella.Absyn.Inl p, A arg) { /* Code for Inl goes here */
-            p.expr_.accept(new ExprVisitor(), arg);
+            if (arg.expectedType instanceof TypeSum) {
+                p.expr_.accept(new ExprVisitor(), new A(arg.IdentTypes,((TypeSum) arg.expectedType).type_1));
+            } else if (arg.expectedType != null) {
+                throw new TypeCheckException("ERROR_UNEXPECTED_INJECTION");
+            } else {
+                throw new TypeCheckException("ERROR_AMBIGUOUS_SUM_TYPE");
+            }
             return null;
         }
 
         public Type visit(org.syntax.stella.Absyn.Inr p, A arg) { /* Code for Inr goes here */
-            p.expr_.accept(new ExprVisitor(), arg);
+            if (arg.expectedType instanceof TypeSum) {
+                p.expr_.accept(new ExprVisitor(), new A(arg.IdentTypes,((TypeSum) arg.expectedType).type_2));
+            } else if (arg.expectedType != null) {
+                throw new TypeCheckException("ERROR_UNEXPECTED_INJECTION");
+            } else {
+                throw new TypeCheckException("ERROR_AMBIGUOUS_SUM_TYPE");
+            }
             return null;
         }
 
@@ -770,7 +897,7 @@ public class VisitTypeCheck {
             if (currentType.equals(arg.expectedType)) {
                 return arg.expectedType;
             }
-            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION");
+            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION 9");
         }
 
         public Type visit(org.syntax.stella.Absyn.LogicNot p, A arg) { /* Code for LogicNot goes here */
@@ -792,7 +919,7 @@ public class VisitTypeCheck {
             if (currentType.equals(arg.expectedType)) {
                 return arg.expectedType;
             }
-            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION");
+            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION 10");
         }
 
         public Type visit(org.syntax.stella.Absyn.Fix p, A arg) { /* Code for Fix goes here */
@@ -815,7 +942,7 @@ public class VisitTypeCheck {
             if (returnType.equals(arg.expectedType)) {
                 return arg.expectedType;
             }
-            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION");
+            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION 11");
         }
 
         public Type visit(org.syntax.stella.Absyn.Fold p, A arg) { /* Code for Fold goes here */
@@ -838,7 +965,7 @@ public class VisitTypeCheck {
             if (currentType.equals(arg.expectedType)) {
                 return arg.expectedType;
             }
-            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION");
+            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION 12");
 
         }
 
@@ -851,7 +978,7 @@ public class VisitTypeCheck {
                 return arg.expectedType;
             }
 
-            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION");
+            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION 13");
         }
 
         public Type visit(org.syntax.stella.Absyn.ConstUnit p, A arg) { /* Code for ConstUnit goes here */
@@ -867,7 +994,7 @@ public class VisitTypeCheck {
             if (currentType.equals(arg.expectedType)) {
                 return arg.expectedType;
             }
-            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION");
+            throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION 14");
         }
 
         @Override
@@ -878,17 +1005,17 @@ public class VisitTypeCheck {
         public Type visit(org.syntax.stella.Absyn.Var p, A arg) {
             Type varType = arg.IdentTypes.get(p.stellaident_);
             if (varType == null) {
-                throw new TypeCheckException(" ERROR_UNDEFINED_VARIABLE");
-            } else {
+                throw new TypeCheckException("ERROR_UNDEFINED_VARIABLE");
+            }
                 if (arg.expectedType == null) {
                     return varType;
                 }
                 if (varType.equals(arg.expectedType)) {
                     return arg.expectedType;
                 }
-                throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION");
+                throw new TypeCheckException("ERROR_UNEXPECTED_TYPE_FOR_EXPRESSION 15");
 
-            }
+
         }
     }
 
